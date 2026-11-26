@@ -70,12 +70,24 @@ export function CaseCard({
         <dl>
           <dt>Request ID</dt>
           <dd>{change.request_id}</dd>
+          <dt>Compromiso y versión</dt>
+          <dd>
+            {change.commitment_id} · versión {change.version}
+          </dd>
           <dt>RAG acotado</dt>
           <dd>
             {change.rag_explanation.sources.map((source) => source.id).join(", ")}
           </dd>
           <dt>Correo</dt>
           <dd>{change.notification.delivery_status}</dd>
+          {change.escalation && (
+            <>
+              <dt>Escalamiento</dt>
+              <dd>
+                {change.escalation.reason} · {change.escalation.owner}
+              </dd>
+            </>
+          )}
           <dt>Eventos</dt>
           <dd>{change.audit_log.map((event) => event.event).join(" → ")}</dd>
         </dl>

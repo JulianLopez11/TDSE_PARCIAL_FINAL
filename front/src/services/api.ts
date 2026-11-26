@@ -9,6 +9,9 @@ export type Order = {
 export type Change = {
   change_id: string;
   request_id: string;
+  source_event_id: string;
+  commitment_id: string;
+  version: number;
   status: string;
   order: {
     order_id: string;
@@ -31,8 +34,14 @@ export type Change = {
     sources: { id: string; title: string }[];
     limitation: string;
   };
-  notification: { recipient: string; subject: string; delivery_status: string };
+  notification: {
+    recipient: string;
+    subject: string;
+    delivery_status: string;
+    error?: string;
+  };
   producer_response?: { action: string; comment: string };
+  escalation?: { reason: string; owner: string; at: string; status: string };
   audit_log: { event: string; at: string; actor: string }[];
 };
 export type Dashboard = {
@@ -41,11 +50,19 @@ export type Dashboard = {
   pending_human_review: number;
   confirmed: number;
   urgent: number;
+  escalated: number;
+  commitments: {
+    commitment_id: string;
+    order_id: string;
+    status: string;
+    version_count: number;
+  }[];
   changes: Change[];
 };
 export type NewChange = {
   order_id: string;
   producer_id: string;
+  source_event_id?: string;
   previous_volume_kg: number;
   new_volume_kg: number;
   required_delivery_at: string;
@@ -76,14 +93,16 @@ export type EmailDraft = {
   error?: string;
 };
 
-export type Integration = {
-  name: string;
-  available?: boolean;
-  connected?: boolean;
-  configured?: boolean;
-  authenticated?: boolean;
-  detail?: string;
-  missing?: string[];
+export type AgentSummary = {
+  open_commitments: number;
+  awaiting_producer: number;
+  escalated: number;
+};
+
+export type InboxSyncResult = {
+  status: string;
+  processed: string[];
+  ignored: string[];
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
@@ -124,17 +143,12 @@ export const origenApi = {
       }),
     }),
   reset: () => request("/demo/reiniciar", { method: "POST" }),
-  integrations: () =>
-    request<{ agent: { name: string; status: string }; tools: Integration[] }>(
-      "/agent/integrations",
-    ),
   activities: () =>
-    request<{ activities: AgentTask[]; drafts: EmailDraft[] }>("/agent/activities"),
-  runTask: (instruction: string) =>
-    request<AgentTask>("/agent/tasks", {
-      method: "POST",
-      body: JSON.stringify({ instruction }),
-    }),
+    request<{
+      activities: AgentTask[];
+      drafts: EmailDraft[];
+      summary: AgentSummary;
+    }>("/agent/activities"),
   updateDraft: (
     draftId: string,
     draft: Pick<EmailDraft, "recipient" | "subject" | "body">,
@@ -151,4 +165,5 @@ export const origenApi = {
         idempotency_key: crypto.randomUUID(),
       }),
     }),
+  syncInbox: () => request<InboxSyncResult>("/agent/inbox/sync", { method: "POST" }),
 };

@@ -216,6 +216,15 @@ select:focus-visible {
   background: #f6e7c7;
   color: #6b4b0d;
 }
+.agent-inbox-action {
+  margin: -12px 0 24px;
+}
+.agent-inbox-action p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
 .agent-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
@@ -247,6 +256,35 @@ select:focus-visible {
   border-radius: 99px;
   background: #fff;
   font-weight: 700;
+}
+.agent-status-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+}
+.agent-status-strip > div {
+  min-width: 0;
+  padding: var(--space-4) var(--space-5);
+}
+.agent-status-strip > div + div {
+  border-left: 1px solid var(--line);
+}
+.agent-status-strip dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.agent-status-strip dd {
+  margin: var(--space-2) 0 0;
+  color: var(--deep);
+  font-family: Newsreader, Georgia, serif;
+  font-size: 1.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .command-box {
   padding: 22px;
@@ -618,6 +656,9 @@ dd {
   .agent-aside {
     grid-template-columns: minmax(0, 1fr);
   }
+  .agent-status-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 @media (max-width: 600px) {
   .workspace {
@@ -651,6 +692,13 @@ dd {
     grid-template-columns: 1fr;
     gap: var(--space-2);
     padding-inline: var(--space-4);
+  }
+  .agent-status-strip {
+    grid-template-columns: 1fr;
+  }
+  .agent-status-strip > div + div {
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
   .form-grid {
     grid-template-columns: 1fr;

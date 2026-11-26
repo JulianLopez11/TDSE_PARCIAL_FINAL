@@ -8,6 +8,7 @@ export function TraceabilityPage({ dashboard }: { dashboard: Dashboard }) {
     [dashboard.urgent, "Urgentes"],
     [dashboard.pending_producer_response, "Esperando productor"],
     [dashboard.pending_human_review, "Revisión humana"],
+    [dashboard.escalated, "Escalados"],
     [dashboard.confirmed, "Confirmados"],
   ];
   return (

@@ -1,17 +1,25 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
-import { AgentTask, EmailDraft, origenApi } from "../services/api";
+import { AgentSummary, AgentTask, EmailDraft, origenApi } from "../services/api";
 import { dateLocal, label } from "../utils/formatters";
 
 type Props = {
   onNotice: (message: string) => void;
   onError: (message: string) => void;
+  onDataChange: () => Promise<void>;
 };
 
-export function AgentPage({ onNotice, onError }: Props) {
+const emptySummary: AgentSummary = {
+  open_commitments: 0,
+  awaiting_producer: 0,
+  escalated: 0,
+};
+
+export function AgentPage({ onNotice, onError, onDataChange }: Props) {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [drafts, setDrafts] = useState<EmailDraft[]>([]);
+  const [summary, setSummary] = useState<AgentSummary>(emptySummary);
   const [activeDraft, setActiveDraft] = useState<EmailDraft | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,9 +28,11 @@ export function AgentPage({ onNotice, onError }: Props) {
       const activities = await origenApi.activities();
       setTasks(activities.activities);
       setDrafts(activities.drafts);
+      setSummary(activities.summary);
       setActiveDraft(
         (current) =>
           activities.drafts.find((draft) => draft.draft_id === current?.draft_id) ??
+          activities.drafts.find((draft) => draft.status !== "SENT") ??
           current,
       );
     } catch (error) {
@@ -32,7 +42,11 @@ export function AgentPage({ onNotice, onError }: Props) {
 
   useEffect(() => {
     void load();
+    const refreshId = window.setInterval(() => void load(), 15_000);
+    return () => window.clearInterval(refreshId);
   }, []);
+
+  const actionableDrafts = drafts.filter((draft) => draft.status !== "SENT");
 
   const saveDraft = async () => {
     if (!activeDraft) return;
@@ -67,6 +81,27 @@ export function AgentPage({ onNotice, onError }: Props) {
     }
   };
 
+  const syncInbox = async () => {
+    setBusy(true);
+    try {
+      const result = await origenApi.syncInbox();
+      const message = result.processed.length
+        ? `Se registró la respuesta de ${result.processed.join(", ")}.`
+        : "No hay respuestas nuevas para registrar.";
+      onNotice(message);
+      await onDataChange();
+      await load();
+    } catch (error) {
+      onError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo revisar el correo entrante.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="agent-page" aria-busy={busy}>
       <div className="agent-header">
@@ -82,6 +117,13 @@ export function AgentPage({ onNotice, onError }: Props) {
         </span>
       </div>
 
+      <div className="command-actions agent-inbox-action">
+        <Button variant="quiet" type="button" onClick={syncInbox} disabled={busy}>
+          Revisar respuestas de correo
+        </Button>
+        <p>El monitor también revisa el buzón cada minuto cuando IMAP está activo.</p>
+      </div>
+
       <div className="agent-layout">
         <div className="agent-main">
           <section className="agent-protocol" aria-label="Alcance del agente">
@@ -91,11 +133,24 @@ export function AgentPage({ onNotice, onError }: Props) {
             <span>Consultar RAG</span>
             <span>Notificar y escalar</span>
           </section>
+          <dl className="agent-status-strip" aria-label="Estado operativo">
+            <div>
+              <dt>Compromisos abiertos</dt>
+              <dd>{summary.open_commitments}</dd>
+            </div>
+            <div>
+              <dt>Esperando productor</dt>
+              <dd>{summary.awaiting_producer}</dd>
+            </div>
+            <div>
+              <dt>Escalados a compras</dt>
+              <dd>{summary.escalated}</dd>
+            </div>
+          </dl>
           {activeDraft && (
             <section className="email-workbench" aria-labelledby="email-title">
               <div className="section-heading">
                 <div>
-                  <p className="section-label">Confirmación requerida</p>
                   <h2 id="email-title">Revisar correo</h2>
                 </div>
                 <span
@@ -146,7 +201,11 @@ export function AgentPage({ onNotice, onError }: Props) {
                   onClick={sendDraft}
                   disabled={busy || activeDraft.status === "SENT"}
                 >
-                  {activeDraft.status === "SENT" ? "Enviado" : "Confirmar y enviar"}
+                  {activeDraft.status === "SENT"
+                    ? "Enviado"
+                    : activeDraft.status === "FAILED"
+                      ? "Reintentar envío"
+                      : "Confirmar y enviar"}
                 </Button>
               </div>
             </section>
@@ -174,7 +233,7 @@ export function AgentPage({ onNotice, onError }: Props) {
             ) : (
               <EmptyState
                 title="Aún no hay actividad"
-                description="Indica una acción y el agente registrará cada paso aquí."
+                description="Registra un cambio desde el ERP para iniciar el flujo automático."
               />
             )}
           </section>
@@ -182,8 +241,8 @@ export function AgentPage({ onNotice, onError }: Props) {
         <aside className="agent-aside">
           <section>
             <h2>Correos en curso</h2>
-            {drafts.length ? (
-              drafts.map((draft) => (
+            {actionableDrafts.length ? (
+              actionableDrafts.map((draft) => (
                 <button
                   className="draft-row"
                   key={draft.draft_id}
@@ -196,7 +255,7 @@ export function AgentPage({ onNotice, onError }: Props) {
             ) : (
               <EmptyState
                 title="Sin correos en curso"
-                description="El primer borrador aparecerá aquí para su revisión."
+                description="El agente mostrará aquí los correos que requieren revisión o reintento."
               />
             )}
           </section>

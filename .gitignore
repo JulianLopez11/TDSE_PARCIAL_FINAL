@@ -5,4 +5,5 @@ front/dist/
 front/*.tsbuildinfo
 *.pyc
 back/.env
+back/data/
 .agents/

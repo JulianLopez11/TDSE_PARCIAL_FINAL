@@ -3,7 +3,12 @@
 Prototipo académico para el caso Café Origen. Incluye un frontend en **React +
 TypeScript** y un backend en **FastAPI**. Simula un ERP, registra cambios de
 pedido, calcula el riesgo, registra la respuesta del productor y expone un
-agente operativo con borradores de correo y trazabilidad de sus tareas.
+agente operativo automático con borradores de correo y trazabilidad de sus
+tareas.
+
+Cada pedido se gestiona como un compromiso trazable. Los eventos del ERP crean
+versiones consecutivas, evitan duplicados mediante `source_event_id` y conservan
+la evidencia de notificación, respuesta, escalamiento y decisión humana.
 
 ## Estructura
 
@@ -75,7 +80,7 @@ http://127.0.0.1:5173/
    notificación simulada y eventos registrados.
 5. Al registrar el cambio, **Agente** detecta el evento, valida los datos, consulta
    las políticas aprobadas, crea un caso y prepara el correo. En **Agente** revisa,
-   edita y confirma el envío SMTP; también puedes consultar el estado de un caso.
+   edita y confirma el envío SMTP cuando la automatización no ha sido autorizada.
 
 ## Endpoints
 
@@ -87,11 +92,12 @@ http://127.0.0.1:5173/
 | `POST` | `/cambios-pedido/{change_id}/respuesta` | Registra aceptar, rechazar o pedir revisión. |
 | `POST` | `/cambios-pedido/{change_id}/aprobacion` | Simula decisión humana para casos sensibles. |
 | `GET` | `/cambios-pedido/{change_id}` | Consulta trazabilidad completa. |
-| `POST` | `/agent/tasks` | Ejecuta una instrucción permitida del agente. |
 | `GET` | `/agent/activities` | Devuelve historial y borradores del agente. |
-| `GET` | `/agent/integrations` | Expone disponibilidad de herramientas sin secretos. |
+| `POST` | `/agent/monitor` | Ejecuta la revisión de casos sin respuesta; la API también la programa cada minuto. |
 | `PATCH` | `/agent/emails/{draft_id}` | Edita un borrador pendiente. |
 | `POST` | `/agent/emails/{draft_id}/send` | Confirma y envía correo por SMTP real. |
+| `GET` | `/agent/inbox/status` | Consulta si la recepción IMAP está configurada. |
+| `POST` | `/agent/inbox/sync` | Lee respuestas nuevas de correo y actualiza el caso trazable. |
 
 ## Configurar correo SMTP real
 
@@ -101,12 +107,42 @@ http://127.0.0.1:5173/
    Otros proveedores pueden requerir `587` con `SMTP_USE_TLS=true`.
 4. Carga las variables en la sesión donde ejecutas Uvicorn. En PowerShell, por
    ejemplo: `$env:SMTP_HOST = "smtp.tu-proveedor.com"`.
-5. Abre **Agente**, crea un borrador y confirma el envío. El servidor usa
-   `smtplib`, espera la respuesta SMTP y solo después marca el correo como `SENT`.
+5. Define `AGENT_AUTO_SEND_EMAIL=false` para que el agente cree un borrador que
+   una persona pueda revisar y confirmar desde la aplicación. Define el valor en
+   `true` solo si existe una autorización explícita de envío automático.
+6. El servidor usa `smtplib`, espera la respuesta SMTP y solo después marca el
+   correo como `SENT`.
+
+## Recibir respuestas por correo
+
+SMTP solo envía correos. Para que una respuesta como `ACEPTO`, `RECHAZO` o
+`SOLICITO REVISIÓN` actualice el caso, activa el receptor en `back/.env`:
+
+```env
+AGENT_INBOUND_EMAIL_ENABLED=true
+```
+
+Con Gmail, el receptor reutiliza automáticamente `SMTP_HOST`, `SMTP_USERNAME`
+y `SMTP_PASSWORD`; no debes duplicar credenciales. Para otro proveedor, define
+`IMAP_HOST`, `IMAP_PORT`, `IMAP_USERNAME` e `IMAP_PASSWORD`. El agente revisa
+cada minuto los mensajes recientes de productores registrados e identifica el
+caso con `CAM-` en el asunto o en el cuerpo; también se puede forzar una
+lectura con `POST /agent/inbox/sync` o desde `POST /agent/monitor`. Solo acepta
+respuestas que provengan del correo registrado para el productor y que incluyan
+el identificador `CAM-...` en el asunto del hilo. Los mensajes ajenos no se
+marcan como leídos.
 
 El prototipo no incluye credenciales ni cuenta de correo. Por eso, hasta que las
-configures, SMTP aparecerá como **No configurado**. Esta es una restricción real,
-no una simulación de éxito.
+configures, cualquier intento de envío queda registrado como error y nunca se
+presenta como exitoso. Esta es una restricción real, no una simulación de éxito.
+
+## Persistencia local del prototipo
+
+Los casos, versiones, borradores, actividades y respuestas se guardan en
+`back/data/state.json`. De esta manera, un reinicio del backend no rompe la
+trazabilidad ni la asociación entre una respuesta por correo y su caso. El
+endpoint `POST /demo/reiniciar` limpia este estado solo cuando se desea empezar
+una demostración desde cero.
 
 ## Caso válido reproducible
 
@@ -126,13 +162,14 @@ $endpoint = "http://127.0.0.1:8000/cambios-pedido"
 Invoke-RestMethod -Method Post -Uri $endpoint -ContentType "application/json" -Body $body
 ```
 
-El resultado debe indicar `PENDING_PRODUCER_RESPONSE`, `urgent: true`, una
-notificación simulada y las fuentes de política usadas para explicar el cambio.
+El resultado debe indicar `PENDING_PRODUCER_RESPONSE`, `urgent: true`, un
+`request_id`, un borrador pendiente y las fuentes de política usadas para explicar
+el cambio.
 
 ## Casos de error y conflicto
 
-1. **Entrada inválida:** envía el mismo valor en `previous_volume_kg` y
-   `new_volume_kg`. La API devuelve `409` porque no existe cambio que comunicar.
+1. **Entrada inválida:** envía un valor negativo en `new_volume_kg`. La API
+   devuelve `422` y explica el campo inválido.
 2. **Conflicto:** registra una respuesta de productor y repite el mismo endpoint.
    La API devuelve `409` para evitar respuestas duplicadas.
 
@@ -140,11 +177,13 @@ notificación simulada y las fuentes de política usadas para explicar el cambio
 
 ```powershell
 cd back
-python -m pytest -q
+python -m pytest -q -p no:cacheprovider test_app.py
 ```
 
-Las tres pruebas cubren un caso válido, una entrada inválida y un conflicto por
-respuesta duplicada.
+Las pruebas desactivan `AGENT_AUTO_SEND_EMAIL` de forma temporal para no enviar
+correos reales. Cubren un caso válido (`201`), una entrada inválida (`422`), un
+conflicto por respuesta duplicada (`409`), idempotencia de eventos, versiones y
+escalamiento por rechazo o falta de respuesta.
 
 ## Calidad de código
 
@@ -169,8 +208,12 @@ npm run build
 - El RAG solo consulta `POL-PROD-01` y `POL-PROD-02`, fuentes ficticias y
   aprobadas para el piloto.
 - El agente se activa ante cada evento de cambio del ERP: valida datos, consulta el
-  RAG acotado, crea un caso, prepara la notificación y registra cada paso. No modifica
-  pedidos definitivos, pagos ni contratos.
+  RAG acotado, crea un caso, prepara o envía la notificación según autorización y
+  registra cada paso. No modifica pedidos definitivos, pagos ni contratos.
+- El monitor automático escala a compras los cambios sin respuesta al vencer el
+  plazo definido. Los rechazos y solicitudes de revisión también se escalan.
+- El RAG del piloto recupera únicamente políticas aprobadas mediante coincidencia
+  de términos; explica la decisión, pero no autoriza cambios finales.
 - Un cambio urgente o de alto impacto no se confirma sin aprobación humana.
 - El envío SMTP requiere confirmación explícita. Las credenciales viven solo en
   variables de entorno del backend; no se devuelven al frontend.

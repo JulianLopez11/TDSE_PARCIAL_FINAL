@@ -29,6 +29,7 @@ export function ErpPage({
     await onCreate({
       order_id: selectedOrder.order_id,
       producer_id: selectedOrder.producer_id,
+      source_event_id: crypto.randomUUID(),
       previous_volume_kg: selectedOrder.current_volume_kg,
       new_volume_kg: Number(volume),
       required_delivery_at: new Date(delivery).toISOString(),

@@ -7,6 +7,8 @@ const emptyDashboard: Dashboard = {
   pending_human_review: 0,
   confirmed: 0,
   urgent: 0,
+  escalated: 0,
+  commitments: [],
   changes: [],
 };
 
@@ -31,6 +33,8 @@ export function useOrigenData() {
   }, []);
   useEffect(() => {
     void refresh();
+    const refreshId = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(refreshId);
   }, [refresh]);
   return { orders, dashboard, error, setError, refresh };
 }

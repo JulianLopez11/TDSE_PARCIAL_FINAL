@@ -75,7 +75,13 @@ export default function App() {
             <button onClick={() => setError("")}>Cerrar</button>
           </div>
         )}
-        {view === "agent" && <AgentPage onNotice={show} onError={setError} />}
+        {view === "agent" && (
+          <AgentPage
+            onNotice={show}
+            onError={setError}
+            onDataChange={refresh}
+          />
+        )}
         {view === "erp" && (
           <ErpPage orders={orders} onCreate={create} onReset={reset} />
         )}
