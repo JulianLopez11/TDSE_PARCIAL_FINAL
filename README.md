@@ -93,7 +93,7 @@ http://127.0.0.1:5173/
 | `POST` | `/cambios-pedido/{change_id}/aprobacion` | Simula decisión humana para casos sensibles. |
 | `GET` | `/cambios-pedido/{change_id}` | Consulta trazabilidad completa. |
 | `GET` | `/agent/activities` | Devuelve historial y borradores del agente. |
-| `POST` | `/agent/monitor` | Ejecuta la revisión de casos sin respuesta; la API también la programa cada minuto. |
+| `POST` | `/agent/monitor` | Ejecuta la revisión de casos sin respuesta; la API también la programa cada 15 segundos por defecto. |
 | `PATCH` | `/agent/emails/{draft_id}` | Edita un borrador pendiente. |
 | `POST` | `/agent/emails/{draft_id}/send` | Confirma y envía correo por SMTP real. |
 | `GET` | `/agent/inbox/status` | Consulta si la recepción IMAP está configurada. |
@@ -125,7 +125,7 @@ AGENT_INBOUND_EMAIL_ENABLED=true
 Con Gmail, el receptor reutiliza automáticamente `SMTP_HOST`, `SMTP_USERNAME`
 y `SMTP_PASSWORD`; no debes duplicar credenciales. Para otro proveedor, define
 `IMAP_HOST`, `IMAP_PORT`, `IMAP_USERNAME` e `IMAP_PASSWORD`. El agente revisa
-cada minuto los mensajes recientes de productores registrados e identifica el
+cada 15 segundos por defecto los mensajes recientes de productores registrados e identifica el
 caso con `CAM-` en el asunto o en el cuerpo; también se puede forzar una
 lectura con `POST /agent/inbox/sync` o desde `POST /agent/monitor`. Solo acepta
 respuestas que provengan del correo registrado para el productor y que incluyan
