@@ -127,9 +127,7 @@ def load_persistent_state() -> None:
     COMMITMENTS.update(state.get("commitments", {}))
     AGENT_TASKS.extend(state.get("agent_tasks", []))
     EMAIL_DRAFTS.update(state.get("email_drafts", {}))
-    PROCESSED_INBOUND_MESSAGE_IDS.update(
-        state.get("processed_inbound_message_ids", [])
-    )
+    PROCESSED_INBOUND_MESSAGE_IDS.update(state.get("processed_inbound_message_ids", []))
     if saved_orders := state.get("erp_orders"):
         ERP_ORDERS[:] = saved_orders
 
@@ -322,9 +320,7 @@ def get_imap_settings() -> dict:
     """Reutiliza las credenciales SMTP cuando el remitente es Gmail."""
     smtp_host = os.getenv("SMTP_HOST", "")
     default_host = (
-        smtp_host.replace("smtp.", "imap.", 1)
-        if smtp_host.startswith("smtp.")
-        else ""
+        smtp_host.replace("smtp.", "imap.", 1) if smtp_host.startswith("smtp.") else ""
     )
     return {
         "host": os.getenv("IMAP_HOST") or default_host,
@@ -395,7 +391,9 @@ def extract_latest_reply(text: str) -> str:
     )
 
 
-def parse_inbound_action(text: str) -> Literal["ACCEPT", "REJECT", "REVIEW_REQUEST"] | None:
+def parse_inbound_action(
+    text: str,
+) -> Literal["ACCEPT", "REJECT", "REVIEW_REQUEST"] | None:
     normalized = " ".join(text.lower().replace("í", "i").split())
     if any(
         term in normalized
@@ -601,19 +599,50 @@ def send_smtp_email(draft: dict) -> None:
 def build_plain_email_html(body: str) -> str:
     """Mantiene legible un borrador modificado manualmente en clientes HTML."""
     safe_body = escape(body).replace("\n", "<br>")
-    return f"""
-    <!doctype html>
-    <html lang="es">
-      <body style="margin:0;background:#f5f7f5;color:#1f2933;font-family:Arial,sans-serif;">
-        <main style="max-width:640px;margin:0 auto;padding:32px 16px;">
-          <section style="background:#ffffff;border:1px solid #d9e2dc;border-radius:12px;padding:28px;">
-            <p style="margin:0;font-size:20px;font-weight:700;color:#123c2a;">Origen Acuerdos</p>
-            <p style="margin:20px 0 0;font-size:15px;line-height:1.65;">{safe_body}</p>
-          </section>
-        </main>
-      </body>
-    </html>
-    """
+    body_style = (
+        "margin:0;background:#f5f7f5;color:#1f2933;font-family:Arial,sans-serif;"
+    )
+    card_style = (
+        "background:#ffffff;border:1px solid #d9e2dc;border-radius:12px;padding:28px;"
+    )
+    return "\n".join(
+        [
+            "<!doctype html>",
+            '<html lang="es">',
+            f'  <body style="{body_style}">',
+            '    <main style="max-width:640px;margin:0 auto;padding:32px 16px;">',
+            f'      <section style="{card_style}">',
+            '        <p style="margin:0;font-size:20px;font-weight:700;'
+            'color:#123c2a;">',
+            "          Origen Acuerdos",
+            "        </p>",
+            '        <p style="margin:20px 0 0;font-size:15px;line-height:1.65;">',
+            f"          {safe_body}",
+            "        </p>",
+            "      </section>",
+            "    </main>",
+            "  </body>",
+            "</html>",
+        ]
+    )
+
+
+def build_change_email_row(label: str, value: str, has_top_border: bool) -> str:
+    """Construye una fila de detalle para el correo de cambio."""
+    cell_style = "padding:12px 14px;"
+    border_style = "border-top:1px solid #d9e2dc;" if has_top_border else ""
+    label_style = (
+        f"{cell_style}background:#f1f6f2;color:#52635a;width:42%;{border_style}"
+    )
+    value_style = f"{cell_style}{border_style}"
+    return "".join(
+        [
+            "<tr>",
+            f'<td style="{label_style}">{label}</td>',
+            f'<td style="{value_style}">{value}</td>',
+            "</tr>",
+        ]
+    )
 
 
 def build_change_email_html(change: dict) -> str:
@@ -621,44 +650,107 @@ def build_change_email_html(change: dict) -> str:
     order = change["order"]
     risk = change["risk"]
     producer_name = escape(change["notification"]["producer_name"])
+    order_id = escape(order["order_id"])
+    change_id = escape(change["change_id"])
+    request_id = escape(change["request_id"])
     reason = escape(order["reason"])
     risk_label = "ALTA PRIORIDAD" if risk["level"] == "HIGH" else "CAMBIO PROGRAMADO"
     risk_color = "#a33a00" if risk["level"] == "HIGH" else "#1f6b4f"
     risk_background = "#fff0e8" if risk["level"] == "HIGH" else "#e9f7ef"
-    response_subject = escape(
-        f"Respuesta {change['change_id']} - {order['order_id']}"
+    badge_style = (
+        "display:inline-block;padding:6px 10px;border-radius:999px;"
+        f"background:{risk_background};color:{risk_color};font-size:12px;"
+        "font-weight:700;letter-spacing:.4px;"
     )
-    return f"""
-    <!doctype html>
-    <html lang="es">
-      <body style="margin:0;background:#f5f7f5;color:#1f2933;font-family:Arial,sans-serif;">
-        <main style="max-width:640px;margin:0 auto;padding:32px 16px;">
-          <section style="overflow:hidden;background:#ffffff;border:1px solid #d9e2dc;border-radius:14px;">
-            <header style="padding:24px 28px;background:#123c2a;color:#ffffff;">
-              <p style="margin:0;font-size:18px;font-weight:700;">Origen Acuerdos</p>
-              <p style="margin:6px 0 0;font-size:13px;color:#d8eee1;">Notificación de cambio de pedido</p>
-            </header>
-            <div style="padding:28px;">
-              <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:{risk_background};color:{risk_color};font-size:12px;font-weight:700;letter-spacing:.4px;">{risk_label}</span>
-              <h1 style="margin:18px 0 10px;font-size:25px;line-height:1.25;color:#123c2a;">Se requiere tu respuesta</h1>
-              <p style="margin:0;font-size:16px;line-height:1.6;">Hola, {producer_name}. Registramos un cambio en el pedido <strong>{escape(order['order_id'])}</strong>. Por favor revísalo y responde a este correo.</p>
-              <table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:0;border:1px solid #d9e2dc;border-radius:10px;overflow:hidden;font-size:14px;">
-                <tr><td style="padding:12px 14px;background:#f1f6f2;color:#52635a;width:42%;">Cambio</td><td style="padding:12px 14px;font-weight:700;">{escape(change['change_id'])} · versión {change['version']}</td></tr>
-                <tr><td style="padding:12px 14px;background:#f1f6f2;color:#52635a;border-top:1px solid #d9e2dc;">Volumen</td><td style="padding:12px 14px;border-top:1px solid #d9e2dc;"><strong>{order['previous_volume_kg']:g} kg → {order['new_volume_kg']:g} kg</strong> ({risk['volume_variation_pct']:+g}%)</td></tr>
-                <tr><td style="padding:12px 14px;background:#f1f6f2;color:#52635a;border-top:1px solid #d9e2dc;">Anticipación</td><td style="padding:12px 14px;border-top:1px solid #d9e2dc;">{risk['lead_hours']:g} horas</td></tr>
-                <tr><td style="padding:12px 14px;background:#f1f6f2;color:#52635a;border-top:1px solid #d9e2dc;">Motivo</td><td style="padding:12px 14px;border-top:1px solid #d9e2dc;">{reason}</td></tr>
-              </table>
-              <section style="padding:18px;border-left:4px solid #2f7d57;background:#f6faf7;">
-                <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#123c2a;">¿Cómo respondo?</p>
-                <p style="margin:0;font-size:14px;line-height:1.6;">Responde este correo indicando una de estas opciones: <strong>ACEPTO</strong>, <strong>RECHAZO</strong> o <strong>SOLICITO REVISIÓN</strong>. Si es necesario, agrega una observación.</p>
-              </section>
-              <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#65736b;">Caso: {escape(change['change_id'])} · Solicitud: {escape(change['request_id'])}. El agente registra y notifica el cambio; no modifica pedidos, pagos ni contratos sin aprobación humana.</p>
-            </div>
-          </section>
-        </main>
-      </body>
-    </html>
-    """
+    change_rows = "\n".join(
+        [
+            build_change_email_row(
+                "Cambio",
+                f"<strong>{change_id} · versión {change['version']}</strong>",
+                has_top_border=False,
+            ),
+            build_change_email_row(
+                "Volumen",
+                (
+                    f"<strong>{order['previous_volume_kg']:g} kg → "
+                    f"{order['new_volume_kg']:g} kg</strong> "
+                    f"({risk['volume_variation_pct']:+g}%)"
+                ),
+                has_top_border=True,
+            ),
+            build_change_email_row(
+                "Anticipación",
+                f"{risk['lead_hours']:g} horas",
+                has_top_border=True,
+            ),
+            build_change_email_row("Motivo", reason, has_top_border=True),
+        ]
+    )
+    greeting = (
+        f"Hola, {producer_name}. Registramos un cambio en el pedido "
+        f"<strong>{order_id}</strong>. Por favor revísalo y responde a este correo."
+    )
+    response_help = (
+        "Responde este correo indicando una de estas opciones: "
+        "<strong>ACEPTO</strong>, <strong>RECHAZO</strong> o "
+        "<strong>SOLICITO REVISIÓN</strong>. Si es necesario, agrega una observación."
+    )
+    traceability = (
+        f"Caso: {change_id} · Solicitud: {request_id}. El agente registra y notifica "
+        "el cambio; no modifica pedidos, pagos ni contratos sin aprobación humana."
+    )
+    return "\n".join(
+        [
+            "<!doctype html>",
+            '<html lang="es">',
+            '  <body style="margin:0;background:#f5f7f5;color:#1f2933;'
+            'font-family:Arial,sans-serif;">',
+            '    <main style="max-width:640px;margin:0 auto;padding:32px 16px;">',
+            '      <section style="overflow:hidden;background:#ffffff;'
+            'border:1px solid #d9e2dc;border-radius:14px;">',
+            '        <header style="padding:24px 28px;background:#123c2a;'
+            'color:#ffffff;">',
+            '          <p style="margin:0;font-size:18px;font-weight:700;">',
+            "            Origen Acuerdos",
+            "          </p>",
+            '          <p style="margin:6px 0 0;font-size:13px;color:#d8eee1;">',
+            "            Notificación de cambio de pedido",
+            "          </p>",
+            "        </header>",
+            '        <div style="padding:28px;">',
+            f'          <span style="{badge_style}">{risk_label}</span>',
+            '          <h1 style="margin:18px 0 10px;font-size:25px;'
+            'line-height:1.25;color:#123c2a;">',
+            "            Se requiere tu respuesta",
+            "          </h1>",
+            '          <p style="margin:0;font-size:16px;line-height:1.6;">',
+            f"            {greeting}",
+            "          </p>",
+            '          <table role="presentation" style="width:100%;margin:24px 0;'
+            "border-collapse:separate;border-spacing:0;border:1px solid #d9e2dc;"
+            'border-radius:10px;overflow:hidden;font-size:14px;">',
+            change_rows,
+            "          </table>",
+            '          <section style="padding:18px;border-left:4px solid #2f7d57;'
+            'background:#f6faf7;">',
+            '            <p style="margin:0 0 8px;font-size:14px;font-weight:700;">',
+            "              ¿Cómo respondo?",
+            "            </p>",
+            '            <p style="margin:0;font-size:14px;line-height:1.6;">',
+            f"              {response_help}",
+            "            </p>",
+            "          </section>",
+            '          <p style="margin:24px 0 0;font-size:12px;line-height:1.5;'
+            'color:#65736b;">',
+            f"            {traceability}",
+            "          </p>",
+            "        </div>",
+            "      </section>",
+            "    </main>",
+            "  </body>",
+            "</html>",
+        ]
+    )
 
 
 def create_change_draft(change: dict) -> dict:
@@ -947,8 +1039,7 @@ def register_change(payload: OrderChangeIn) -> dict:
             "recipient": producer["email"],
             "producer_name": producer["name"],
             "subject": (
-                f"Acción requerida | Pedido {payload.order_id} | "
-                f"Cambio {change_id}"
+                f"Acción requerida | Pedido {payload.order_id} | Cambio {change_id}"
             ),
             "body": notification_body,
             "delivery_status": "PENDING_AGENT",
@@ -1159,9 +1250,7 @@ def apply_producer_response(
             steps=["Respuesta registrada", "Riesgo alto detectado", "Compras asignado"],
         )
     else:
-        reason = (
-            "PRODUCER_REJECTED" if action == "REJECT" else "REVIEW_REQUESTED"
-        )
+        reason = "PRODUCER_REJECTED" if action == "REJECT" else "REVIEW_REQUESTED"
         escalation_message = (
             "El productor rechazó el cambio; caso escalado a compras."
             if action == "REJECT"

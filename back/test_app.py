@@ -182,9 +182,7 @@ def test_review_request_explains_the_escalation_to_purchases() -> None:
 
     assert response.status_code == 200
     assert "solicitó revisión" in response.json()["next_action"]
-    assert CHANGES[created["change_id"]]["escalation"]["reason"] == (
-        "REVIEW_REQUESTED"
-    )
+    assert CHANGES[created["change_id"]]["escalation"]["reason"] == ("REVIEW_REQUESTED")
 
 
 def test_inbound_reply_parses_only_the_new_producer_decision() -> None:

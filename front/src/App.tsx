@@ -76,11 +76,7 @@ export default function App() {
           </div>
         )}
         {view === "agent" && (
-          <AgentPage
-            onNotice={show}
-            onError={setError}
-            onDataChange={refresh}
-          />
+          <AgentPage onNotice={show} onError={setError} onDataChange={refresh} />
         )}
         {view === "erp" && (
           <ErpPage orders={orders} onCreate={create} onReset={reset} />
